@@ -1,20 +1,20 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
-import { AGENT_ORDER, AGENTS, AgentStreamEvent } from "@/lib/agents";
+import { AGENT_ORDER, AGENTS, AgentStreamEvent, ApiKeyMap } from "@/lib/agents";
 
 export const runtime = "nodejs";
 
-const client = new OpenAI({
-  baseURL: process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
-});
+const BASE_URL = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
 
 function encodeEvent(event: AgentStreamEvent): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(event) + "\n");
 }
 
 export async function POST(req: NextRequest) {
-  const { message } = await req.json();
+  const { message, apiKeys } = (await req.json()) as {
+    message?: string;
+    apiKeys?: ApiKeyMap;
+  };
 
   if (!message || typeof message !== "string") {
     return new Response(JSON.stringify({ error: "message wajib diisi" }), {
@@ -31,7 +31,25 @@ export async function POST(req: NextRequest) {
       try {
         for (const agentId of AGENT_ORDER) {
           const agent = AGENTS[agentId];
+
+          // Prioritas: key yang diisi user untuk agent ini di panel Settings.
+          // Kalau kosong, fallback ke env var server (OPENROUTER_API_KEY).
+          const apiKey = apiKeys?.[agentId] || process.env.OPENROUTER_API_KEY;
+
+          if (!apiKey) {
+            controller.enqueue(
+              encodeEvent({
+                type: "error",
+                message: `Belum ada API key untuk agent ${agent.label}. Isi di Settings dulu.`,
+              })
+            );
+            break;
+          }
+
           controller.enqueue(encodeEvent({ type: "agent_start", agent: agentId }));
+
+          // Bikin client baru per agent karena tiap agent bisa punya key beda.
+          const client = new OpenAI({ baseURL: BASE_URL, apiKey });
 
           const completion = await client.chat.completions.create({
             model: agent.model,

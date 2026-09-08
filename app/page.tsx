@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AgentRoster, { AgentStatus } from "@/components/AgentRoster";
 import { UserMessage, AgentMessage } from "@/components/MessageBubble";
-import { AGENT_ORDER, AgentId, AgentStreamEvent } from "@/lib/agents";
+import SettingsPanel, { loadApiKeys } from "@/components/SettingsPanel";
+import { AGENT_ORDER, AgentId, AgentStreamEvent, ApiKeyMap } from "@/lib/agents";
 
 type Turn =
   | { kind: "user"; text: string }
@@ -20,7 +21,16 @@ export default function Page() {
   const [input, setInput] = useState("");
   const [statuses, setStatuses] = useState<Record<AgentId, AgentStatus>>(initialStatuses);
   const [isBusy, setIsBusy] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [apiKeys, setApiKeys] = useState<ApiKeyMap>({});
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Muat API key yang sudah pernah disimpan user di browser ini
+  useEffect(() => {
+    setApiKeys(loadApiKeys());
+  }, []);
+
+  const hasAllKeys = AGENT_ORDER.every((id) => apiKeys[id]);
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -42,7 +52,7 @@ export default function Page() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, apiKeys }),
       });
 
       if (!res.body) throw new Error("Tidak ada respons dari server");
@@ -115,11 +125,30 @@ export default function Page() {
       <AgentRoster statuses={statuses} />
 
       <div className="flex flex-1 flex-col">
-        <header className="border-b border-line px-6 py-5">
-          <h1 className="font-display text-2xl text-ink">Agent Team Chat</h1>
-          <p className="mt-1 text-sm text-inkMuted">
-            Kirim satu permintaan, tiga agent mengerjakannya secara berurutan.
-          </p>
+        <header className="flex items-start justify-between border-b border-line px-6 py-5">
+          <div>
+            <h1 className="font-display text-2xl text-ink">Agent Team Chat</h1>
+            <p className="mt-1 text-sm text-inkMuted">
+              Kirim satu permintaan, tiga agent mengerjakannya secara berurutan.
+            </p>
+            {!hasAllKeys && (
+              <p className="mt-1 text-sm text-coder">
+                Belum semua agent punya API key —{" "}
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="underline underline-offset-2"
+                >
+                  isi di Settings
+                </button>
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="shrink-0 rounded-md border border-line px-3 py-2 text-sm text-inkMuted hover:text-ink"
+          >
+            Settings
+          </button>
         </header>
 
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-6 py-6">
@@ -167,6 +196,12 @@ export default function Page() {
           </button>
         </form>
       </div>
+
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={setApiKeys}
+      />
     </main>
   );
 }

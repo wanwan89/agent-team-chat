@@ -50,6 +50,12 @@ export const AGENTS: Record<AgentId, AgentDefinition> = {
   },
 };
 
+// API key OpenRouter per agent, diisi user sendiri lewat panel Settings
+// dan disimpan di localStorage browser (bukan di server).
+export type ApiKeyMap = Partial<Record<AgentId, string>>;
+
+export const API_KEY_STORAGE_KEY = "agent-team-chat:api-keys";
+
 // Bentuk satu event yang dikirim lewat streaming dari API route ke UI
 export type AgentStreamEvent =
   | { type: "agent_start"; agent: AgentId }
